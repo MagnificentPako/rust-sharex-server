@@ -23,7 +23,6 @@ use std::io::prelude::*;
 use rocket::response::NamedFile;
 use glob::glob;
 use std::vec::Vec;
-use std::iter::FromIterator;
 use rocket::config::{self};
 use sha2::{Sha512, Digest};
 
@@ -68,7 +67,7 @@ fn index_upload(upload: FileUpload, conf: State<ShareXConfig>) -> Option<String>
     let mut file = File::create(path).unwrap();
     file.write_all(upload.file.as_slice()).unwrap();
 
-    Some(format!("localhost:6969/{}", raw_name))
+    Some(format!("{}/{}", conf.base_path, raw_name))
 
 }
 
@@ -80,12 +79,14 @@ fn files(file: PathBuf) -> Option<NamedFile> {
 #[derive(Debug)]
 struct ShareXConfig {
     pass_hash: String,
+    base_path: String,
 }
 
 impl ShareXConfig {
-    fn new(hash: String) -> Self {
+    fn new(hash: String, path: String) -> Self {
         ShareXConfig {
-            pass_hash: hash
+            pass_hash: hash,
+            base_path: path
         }
     }
 }
@@ -157,8 +158,10 @@ fn verify(clear: String, hash: String) -> bool {
 }
 
 fn main() {
-    let rock = rocket::ignite()
-        .mount("/", routes![image, files, index_upload, index])
-        .manage(ShareXConfig::new(config::active().unwrap().get_str("password_hash").unwrap().to_string()))
-        .launch();
+        rocket::ignite()
+            .mount("/", routes![image, files, index_upload, index])
+            .manage(ShareXConfig::new(
+                config::active().unwrap().get_str("password_hash").unwrap().to_string(),
+                config::active().unwrap().get_str("base_path").unwrap().to_string()))
+            .launch();
 }
