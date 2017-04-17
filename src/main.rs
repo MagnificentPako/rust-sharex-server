@@ -7,7 +7,13 @@ extern crate rocket_contrib;
 extern crate rand;
 extern crate mime_guess;
 extern crate glob;
+extern crate sha2;
 
+use std::io::{Cursor, Read};
+use rocket::{Request, Data, Outcome};
+use rocket::data::{self, FromData};
+use rocket::State;
+use multipart::server::Multipart;
 use rand::{thread_rng, Rng};
 use rocket_contrib::Template;
 use std::path::{Path, PathBuf};
@@ -16,6 +22,10 @@ use mime_guess::get_mime_extensions_str;
 use std::io::prelude::*;
 use rocket::response::NamedFile;
 use glob::glob;
+use std::vec::Vec;
+use std::iter::FromIterator;
+use rocket::config::{self};
+use sha2::{Sha512, Digest};
 
 fn random_name(n: usize) -> String {
     thread_rng().gen_ascii_chars().take(n).collect()
@@ -40,20 +50,25 @@ fn index() -> Template {
 }
 
 #[post("/", data = "<upload>")]
-fn index_upload(upload: FileUpload) -> String {
+fn index_upload(upload: FileUpload, conf: State<ShareXConfig>) -> Option<String> {
+    let pass = upload.password.clone();
+    let pass_hash = conf.pass_hash.clone();
+    if !verify(pass, pass_hash) {
+        return None;
+    }
     let name = random_name(8);
-    let rawName = name.clone();
-    let fileName = name + "." + match get_mime_extensions_str(&upload.mime) {
+    let raw_name = name.clone();
+    let file_name = name + "." + match get_mime_extensions_str(&upload.mime) {
         None => "png",
         Some(extensions) => extensions[0],
     };
 
     let mut path = String::from("uploads/");
-    path.push_str(fileName.as_str());
+    path.push_str(file_name.as_str());
     let mut file = File::create(path).unwrap();
     file.write_all(upload.file.as_slice()).unwrap();
 
-    format!("localhost:6969/{}", rawName)
+    Some(format!("localhost:6969/{}", raw_name))
 
 }
 
@@ -63,17 +78,24 @@ fn files(file: PathBuf) -> Option<NamedFile> {
 }
 
 #[derive(Debug)]
+struct ShareXConfig {
+    pass_hash: String,
+}
+
+impl ShareXConfig {
+    fn new(hash: String) -> Self {
+        ShareXConfig {
+            pass_hash: hash
+        }
+    }
+}
+
+#[derive(Debug)]
 struct FileUpload {
-    username: String,
     password: String,
     mime: String,
     file: Vec<u8>,
 }
-
-use std::io::{Cursor, Read};
-use rocket::{Request, Data, Outcome};
-use rocket::data::{self, FromData};
-use multipart::server::Multipart;
 
 impl FromData for FileUpload {
     type Error = ();
@@ -91,7 +113,6 @@ impl FromData for FileUpload {
 
         // Custom implementation parts
 
-        let mut username = None;
         let mut password = None;
         let mut file = None;
         let mut mime = None;
@@ -101,10 +122,6 @@ impl FromData for FileUpload {
                 "mime" => { 
                     let t = entry.data.as_text().expect("not text");
                     mime = Some(t.into());
-                },
-                "username" => {
-                    let t = entry.data.as_text().expect("not text");
-                    username = Some(t.into());
                 },
                 "password" => {
                     let t = entry.data.as_text().expect("not text");
@@ -121,7 +138,6 @@ impl FromData for FileUpload {
         }).expect("Unable to iterate");
 
         let v = FileUpload {
-            username: username.expect("username not set"),
             password: password.expect("password not set"),
             file: file.expect("file not set"),
             mime: mime.expect("mime not present"),
@@ -133,6 +149,16 @@ impl FromData for FileUpload {
     }
 }
 
+fn verify(clear: String, hash: String) -> bool {
+    let mut hasher = Sha512::default();
+    hasher.input(clear.as_bytes());
+    let output = hasher.result().into_iter().map(|x| format!("{:02x}",x).to_string()).collect::<String>();
+    output == hash
+}
+
 fn main() {
-    rocket::ignite().mount("/", routes![image, files, index_upload, index]).launch();
+    let rock = rocket::ignite()
+        .mount("/", routes![image, files, index_upload, index])
+        .manage(ShareXConfig::new(config::active().unwrap().get_str("password_hash").unwrap().to_string()))
+        .launch();
 }
