@@ -119,11 +119,8 @@ impl FromData for FileUpload {
         let mut mime = None;
 
         mp.foreach_entry(|mut entry| {
+            //println!("{} : {:?}", entry.name, entry.data.as_text());
             match entry.name.as_str() {
-                "mime" => { 
-                    let t = entry.data.as_text().expect("not text");
-                    mime = Some(t.into());
-                },
                 "password" => {
                     let t = entry.data.as_text().expect("not text");
                     password = Some(t.into());
@@ -132,6 +129,7 @@ impl FromData for FileUpload {
                     let mut d = Vec::new();
                     let f = entry.data.as_file().expect("not file");
                     f.read_to_end(&mut d).expect("cant read");
+                    mime = Some(format!("{}", f.content_type));
                     file = Some(d);
                 },
                 other => panic!("No known key {}", other),
@@ -141,7 +139,7 @@ impl FromData for FileUpload {
         let v = FileUpload {
             password: password.expect("password not set"),
             file: file.expect("file not set"),
-            mime: mime.expect("mime not present"),
+            mime: mime.expect("Mime not set")
         };
 
         // End custom

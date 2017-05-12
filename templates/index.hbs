@@ -13,10 +13,10 @@
             $dom.onready(() => {
                 const fileInput = document.getElementById("fileInput")
                 const fileDisplay = document.getElementById("fileDisplay")
-                const mimeInput = document.getElementById("mimeInput")
+                //const mimeInput = document.getElementById("mimeInput")
                 $dom.addEvent(fileInput, "change", () => {
-                    console.log(fileInput.files.item(0))
-                    mimeInput.value = fileInput.files.item(0).type
+                    //console.log(fileInput.files.item(0))
+                    //mimeInput.value = fileInput.files.item(0).type
                     fileDisplay.textContent = "Selected: " + fileInput.files.item(0).name
                 })
             })
@@ -28,7 +28,6 @@
         <form enctype="multipart/form-data" method="post" action="/">
             <input type="file" name="file" id="fileInput">
             <p id="fileDisplay">Drag your files here or click in this area.</p>
-            <input type="hidden" value="" name="mime" id="mimeInput">
             <input type="password" name="password" placeholder="Password">
             <button type="submit">Upload</button>
         </form>
